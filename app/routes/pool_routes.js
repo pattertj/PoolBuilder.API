@@ -73,14 +73,17 @@ module.exports = function (app, db) {
                 };
 
                 cards.forEach(card => {
-                    if (card.type != "Land" && (
-                            card.colorIdentity === color[0] ||
-                            card.colorIdentity === color[1] ||
-                            card.colorIdentity === color[2] ||
-                            card.colorIdentity === color[0].concat(",").concat(color[1]).concat(",").concat(color[2]))) {
+                    if (card.type != "Land" &&
+                        (
+                            (card.colors.length === 0) ||
+                            (card.colors.length === 1 && (card.colors[0] === color[0] || card.colors[0] === color[1] || card.colors[0] === color[2])) ||
+                            (card.colors.length === 2 && card.colors.includes(color[0]) && card.colors.includes(color[1])) ||
+                            (card.colors.length === 2 && card.colors.includes(color[0]) && card.colors.includes(color[2])) ||
+                            (card.colors.length === 2 && card.colors.includes(color[1]) && card.colors.includes(color[2])) ||
+                            (card.colors.length === 3 && card.colors.includes(color[1]) && card.colors.includes(color[2]) && card.colors.includes(color[3]))
+                        )
+                    ) {
                         colorAnalysis.cards.push(card);
-                        colorAnalysis.count += card.cardCount;
-                        colorAnalysis.average = ((colorAnalysis.average * (colorAnalysis.count - 1)) + card.powerranking) / colorAnalysis.count;
                     }
                 })
 
@@ -127,9 +130,13 @@ module.exports = function (app, db) {
                 };
 
                 cards.forEach(card => {
-                    if (card.type != "Land" && (card.colorIdentity === color[0] ||
-                            card.colorIdentity === color[1] ||
-                            card.colorIdentity === color[0].concat(",").concat(color[1]))) {
+                    if (card.type != "Land" &&
+                        (
+                            (card.colors.length === 0) ||
+                            (card.colors.length === 1 && (card.colors[0] === color[0] || card.colors[0] === color[1])) ||
+                            (card.colors.length === 2 && card.colors.includes(color[0]) && card.colors.includes(color[1]))
+                        )
+                    ) {
                         colorAnalysis.cards.push(card);
                     }
                 })
@@ -166,7 +173,15 @@ module.exports = function (app, db) {
                 };
 
                 cards.forEach(card => {
-                    if (card.type != "Land" && card.colorIdentity === color) {
+                    if (card.type != "Land" &&
+                        (
+                            card.colors.length === 0 ||
+                            (
+                                card.colors[0] === color &&
+                                card.colors.length === 1
+                            )
+                        )
+                    ) {
                         colorAnalysis.cards.push(card);
                     }
                 })
@@ -226,11 +241,28 @@ module.exports = function (app, db) {
             Promise.all(cardGathererPromises)
                 .then(function (results) {
                     results.forEach(card => {
-                        card.W = (card.manaCost.match(/W/g) || []).length;
-                        card.U = (card.manaCost.match(/U/g) || []).length;
-                        card.B = (card.manaCost.match(/B/g) || []).length;
-                        card.R = (card.manaCost.match(/R/g) || []).length;
-                        card.G = (card.manaCost.match(/G/g) || []).length;
+                        card.W = parseInt((card.manaCost.match(/W/g) || []).length);
+                        card.U = parseInt((card.manaCost.match(/U/g) || []).length);
+                        card.B = parseInt((card.manaCost.match(/B/g) || []).length);
+                        card.R = parseInt((card.manaCost.match(/R/g) || []).length);
+                        card.G = parseInt((card.manaCost.match(/G/g) || []).length);
+
+                        card.colors = [];
+                        if (card.W > 0) {
+                            card.colors.push("W")
+                        };
+                        if (card.U > 0) {
+                            card.colors.push("U")
+                        };
+                        if (card.B > 0) {
+                            card.colors.push("B")
+                        };
+                        if (card.R > 0) {
+                            card.colors.push("R")
+                        };
+                        if (card.G > 0) {
+                            card.colors.push("G")
+                        };
                     });
 
                     resolve(results);
