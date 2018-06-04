@@ -19,6 +19,9 @@ module.exports = function (app, db) {
             .then(function (gatheredCards) {
                 return GetRatingData(gatheredCards)
             })
+            .then(function (ratedCards) {
+                return GetManaData(ratedCards)
+            })
             .then(function (hydratedCards) {
                 analysis.pool = hydratedCards.sort(compare);
                 return CalculateMonoColors(analysis.pool);
@@ -89,13 +92,12 @@ module.exports = function (app, db) {
 
                 colorAnalysis.cards.splice(23, colorAnalysis.cards.length - 23)
 
-                var totalScore = 0;
-
-                colorAnalysis.cards.forEach(card => {
-                    totalScore += card.powerranking;
-                });
-
-                colorAnalysis.average = totalScore / colorAnalysis.cards.length;
+                colorAnalysis.average = colorAnalysis.cards.average("powerranking");
+                colorAnalysis.whiteSources = colorAnalysis.cards.max("whiteSources");
+                colorAnalysis.blueSources = colorAnalysis.cards.max("blueSources");
+                colorAnalysis.blackSources = colorAnalysis.cards.max("blackSources");
+                colorAnalysis.redSources = colorAnalysis.cards.max("redSources");
+                colorAnalysis.greenSources = colorAnalysis.cards.max("greenSources");
                 colorAnalysis.count = colorAnalysis.cards.length;
 
                 colorsAnalysis.push(colorAnalysis);
@@ -143,13 +145,12 @@ module.exports = function (app, db) {
 
                 colorAnalysis.cards.splice(23, colorAnalysis.cards.length - 23)
 
-                var totalScore = 0;
-
-                colorAnalysis.cards.forEach(card => {
-                    totalScore += card.powerranking;
-                });
-
-                colorAnalysis.average = totalScore / colorAnalysis.cards.length;
+                colorAnalysis.average = colorAnalysis.cards.average("powerranking");
+                colorAnalysis.whiteSources = colorAnalysis.cards.max("whiteSources");
+                colorAnalysis.blueSources = colorAnalysis.cards.max("blueSources");
+                colorAnalysis.blackSources = colorAnalysis.cards.max("blackSources");
+                colorAnalysis.redSources = colorAnalysis.cards.max("redSources");
+                colorAnalysis.greenSources = colorAnalysis.cards.max("greenSources");
                 colorAnalysis.count = colorAnalysis.cards.length;
 
                 colorsAnalysis.push(colorAnalysis);
@@ -165,6 +166,7 @@ module.exports = function (app, db) {
             var colorsAnalysis = [];
 
             colors.forEach(color => {
+                // Create a new Analysis
                 var colorAnalysis = {
                     color: color,
                     count: 0,
@@ -172,6 +174,7 @@ module.exports = function (app, db) {
                     cards: []
                 };
 
+                // Find matching non-land cards
                 cards.forEach(card => {
                     if (card.type != "Land" &&
                         (
@@ -186,15 +189,16 @@ module.exports = function (app, db) {
                     }
                 })
 
+                // The list is already sorted, so only keep the top 23
                 colorAnalysis.cards.splice(23, colorAnalysis.cards.length - 23)
 
-                var totalScore = 0;
-
-                colorAnalysis.cards.forEach(card => {
-                    totalScore += card.powerranking;
-                });
-
-                colorAnalysis.average = totalScore / colorAnalysis.cards.length;
+                // Calculate the average and count.
+                colorAnalysis.average = colorAnalysis.cards.average("powerranking");
+                colorAnalysis.whiteSources = colorAnalysis.cards.max("whiteSources");
+                colorAnalysis.blueSources = colorAnalysis.cards.max("blueSources");
+                colorAnalysis.blackSources = colorAnalysis.cards.max("blackSources");
+                colorAnalysis.redSources = colorAnalysis.cards.max("redSources");
+                colorAnalysis.greenSources = colorAnalysis.cards.max("greenSources");
                 colorAnalysis.count = colorAnalysis.cards.length;
 
                 colorsAnalysis.push(colorAnalysis);
@@ -202,6 +206,57 @@ module.exports = function (app, db) {
 
             resolve(colorsAnalysis);
         })
+    };
+
+    // Extension of Array.Max to max attributes.
+    Array.prototype.max = function (prop) {
+        var max = 0
+        for (var i = 0, _len = this.length; i < _len; i++) {
+            max = Math.max(this[i][prop], max);
+        }
+        return max;
+    }
+
+    // Extension of Array.Average to average attributes.
+    Array.prototype.average = function (prop) {
+        var total = 0
+        for (var i = 0, _len = this.length; i < _len; i++) {
+            total += this[i][prop]
+        }
+        return total / this.length
+    }
+
+    function GetManaData(cards) {
+        return new Promise((resolve, reject) => {
+            var hydratedCards = [];
+
+            manaBasePromises = cards.map(fetchManaBase);
+
+            Promise.all(manaBasePromises)
+                .then(function (results) {
+                    results.forEach(card => {
+
+                        if (card == null) {
+                            return null;
+                        }
+
+                        var gathererData = cards.find(gCard => gCard.name === card.name);
+
+                        gathererData.whiteSources = card.whiteSources;
+                        gathererData.blueSources = card.blueSources;
+                        gathererData.blackSources = card.blackSources;
+                        gathererData.redSources = card.redSources;
+                        gathererData.greenSources = card.greenSources;
+
+                        hydratedCards.push(gathererData);
+                    })
+
+                    resolve(hydratedCards);
+                })
+                .catch(function (err) {
+                    console.error(err);
+                });
+        });
     };
 
     function GetRatingData(cards) {
@@ -230,6 +285,9 @@ module.exports = function (app, db) {
                     })
 
                     resolve(ratedCards);
+                })
+                .catch(function (err) {
+                    console.error(err);
                 });
         });
     };
@@ -263,9 +321,12 @@ module.exports = function (app, db) {
                         if (card.G > 0) {
                             card.colors.push("G")
                         };
-                    });
+                    })
 
                     resolve(results);
+                })
+                .catch(function (err) {
+                    console.error(err);
                 });
         })
     };
@@ -317,6 +378,32 @@ module.exports = function (app, db) {
 
             request(options, function (error, response, body) {
                 body.cardCount = card.cardCount;
+                resolve(body);
+            });
+        });
+    };
+
+    var fetchManaBase = function (card) {
+        return new Promise((resolve, reject) => {
+
+            var options = {
+                method: 'POST',
+                url: 'https://mtgmanabaseapi.herokuapp.com/api/manabase/card/name',
+                json: true,
+                headers: {
+                    'Postman-Token': 'fae497a7-8b02-451d-88f8-d01d0d7cccfd',
+                    'Cache-Control': 'no-cache',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                form: {
+                    CardName: card.name,
+                    format: 'Limited'
+                }
+            };
+
+            request(options, function (error, response, body) {
+                if (error) throw new Error(error);
+                body.name = card.name;
                 resolve(body);
             });
         });
